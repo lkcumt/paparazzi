@@ -38,7 +38,7 @@ else
 endif
 
 
-nps.srcs += $(NPSDIR)/nps_main.c                      \
+nps.srcs += $(NPSDIR)/nps_main.c                 \
        $(NPSDIR)/nps_fdm_jsbsim.c                \
        $(NPSDIR)/nps_random.c                    \
        $(NPSDIR)/nps_sensors.c                   \
@@ -48,29 +48,30 @@ nps.srcs += $(NPSDIR)/nps_main.c                      \
        $(NPSDIR)/nps_sensor_mag.c                \
        $(NPSDIR)/nps_sensor_baro.c               \
        $(NPSDIR)/nps_sensor_gps.c                \
+       $(NPSDIR)/nps_electrical.c                \
+       $(NPSDIR)/nps_atmosphere.c                \
        $(NPSDIR)/nps_radio_control.c             \
        $(NPSDIR)/nps_radio_control_joystick.c    \
        $(NPSDIR)/nps_radio_control_spektrum.c    \
-       $(NPSDIR)/nps_autopilot_rotorcraft.c            \
-       $(NPSDIR)/nps_ivy.c                       \
+       $(NPSDIR)/nps_autopilot_rotorcraft.c      \
+       $(NPSDIR)/nps_ivy_common.c                \
+       $(NPSDIR)/nps_ivy_rotorcraft.c            \
        $(NPSDIR)/nps_flightgear.c                \
 
 
 
 nps.CFLAGS += -DBOARD_CONFIG=$(BOARD_CFG) -DPERIPHERALS_AUTO_INIT
 
-nps.srcs   += firmwares/rotorcraft/main.c
-nps.srcs   += mcu.c
-nps.srcs   += $(SRC_ARCH)/mcu_arch.c
+nps.srcs += firmwares/rotorcraft/main.c
+nps.srcs += mcu.c
+nps.srcs += $(SRC_ARCH)/mcu_arch.c
 
 nps.srcs += mcu_periph/i2c.c
 nps.srcs += $(SRC_ARCH)/mcu_periph/i2c_arch.c
 
 
 PERIODIC_FREQUENCY ?= 512
-TELEMETRY_FREQUENCY ?= 60
 nps.CFLAGS += -DPERIODIC_FREQUENCY=$(PERIODIC_FREQUENCY)
-nps.CFLAGS += -DTELEMETRY_FREQUENCY=$(TELEMETRY_FREQUENCY)
 #nps.CFLAGS += -DUSE_LED
 nps.srcs += mcu_periph/sys_time.c $(SRC_ARCH)/mcu_periph/sys_time_arch.c
 
@@ -92,8 +93,7 @@ nps.srcs += $(SRC_FIRMWARE)/datalink.c
 #
 nps.srcs += math/pprz_geodetic_int.c math/pprz_geodetic_float.c math/pprz_geodetic_double.c math/pprz_trig_int.c math/pprz_orientation_conversion.c
 
-nps.CFLAGS += -DROTORCRAFT_BARO_LED=2
-nps.srcs += $(SRC_BOARD)/baro_board.c
+nps.srcs += subsystems/air_data.c
 
 nps.CFLAGS += -DUSE_ADC
 nps.srcs   += $(SRC_ARCH)/mcu_periph/adc_arch.c

@@ -25,6 +25,7 @@
 
 #include "firmwares/rotorcraft/stabilization.h"
 #include "firmwares/rotorcraft/stabilization/stabilization_attitude_rc_setpoint.h"
+#include "firmwares/rotorcraft/stabilization/stabilization_attitude_quat_transformations.h"
 
 #include <stdio.h>
 #include "math/pprz_algebra_float.h"
@@ -35,7 +36,7 @@
 struct FloatAttitudeGains stabilization_gains[STABILIZATION_ATTITUDE_GAIN_NB];
 
 struct FloatQuat stabilization_att_sum_err_quat;
-struct FloatEulers stabilization_att_sum_err_eulers;
+struct FloatEulers stabilization_att_sum_err;
 
 struct FloatRates last_body_rate;
 
@@ -108,7 +109,7 @@ void stabilization_attitude_init(void) {
   }
 
   FLOAT_QUAT_ZERO( stabilization_att_sum_err_quat );
-  FLOAT_EULERS_ZERO( stabilization_att_sum_err_eulers );
+  FLOAT_EULERS_ZERO( stabilization_att_sum_err );
   FLOAT_RATES_ZERO( last_body_rate );
 }
 
@@ -130,7 +131,7 @@ void stabilization_attitude_enter(void) {
   stabilization_attitude_ref_enter();
 
   FLOAT_QUAT_ZERO( stabilization_att_sum_err_quat );
-  FLOAT_EULERS_ZERO( stabilization_att_sum_err_eulers );
+  FLOAT_EULERS_ZERO( stabilization_att_sum_err );
 }
 
 void stabilization_attitude_set_failsafe_setpoint(void) {
@@ -142,10 +143,21 @@ void stabilization_attitude_set_failsafe_setpoint(void) {
   stab_att_sp_quat.qz = sinf(heading2);
 }
 
-void stabilization_attitude_set_from_eulers_i(struct Int32Eulers *sp_euler) {
-  EULERS_FLOAT_OF_BFP(stab_att_sp_euler, *sp_euler);
-  FLOAT_QUAT_OF_EULERS(stab_att_sp_quat, stab_att_sp_euler);
-  FLOAT_QUAT_WRAP_SHORTEST(stab_att_sp_quat);
+void stabilization_attitude_set_rpy_setpoint_i(struct Int32Eulers *rpy) {
+  // copy euler setpoint for debugging
+  EULERS_FLOAT_OF_BFP(stab_att_sp_euler, *rpy);
+
+  quat_from_rpy_cmd_f(&stab_att_sp_quat, &stab_att_sp_euler);
+}
+
+void stabilization_attitude_set_earth_cmd_i(struct Int32Vect2 *cmd, int32_t heading) {
+  struct FloatVect2 cmd_f;
+  cmd_f.x = ANGLE_FLOAT_OF_BFP(cmd->x);
+  cmd_f.y = ANGLE_FLOAT_OF_BFP(cmd->y);
+  float heading_f;
+  heading_f = ANGLE_FLOAT_OF_BFP(heading);
+
+  quat_from_earth_cmd_f(&stab_att_sp_quat, &cmd_f, heading_f);
 }
 
 #ifndef GAIN_PRESCALER_FF
@@ -252,11 +264,11 @@ void stabilization_attitude_run(bool_t enable_integrator) {
     FLOAT_QUAT_COMP(new_sum_err, stabilization_att_sum_err_quat, scaled_att_err);
     FLOAT_QUAT_NORMALIZE(new_sum_err);
     FLOAT_QUAT_COPY(stabilization_att_sum_err_quat, new_sum_err);
-    FLOAT_EULERS_OF_QUAT(stabilization_att_sum_err_eulers, stabilization_att_sum_err_quat);
+    FLOAT_EULERS_OF_QUAT(stabilization_att_sum_err, stabilization_att_sum_err_quat);
   } else {
     /* reset accumulator */
     FLOAT_QUAT_ZERO( stabilization_att_sum_err_quat );
-    FLOAT_EULERS_ZERO( stabilization_att_sum_err_eulers );
+    FLOAT_EULERS_ZERO( stabilization_att_sum_err );
   }
 
   attitude_run_ff(stabilization_att_ff_cmd, &stabilization_gains[gain_idx], &stab_att_ref_accel);

@@ -35,9 +35,6 @@ $(TARGET).CFLAGS 	+= -DBOARD_CONFIG=$(BOARD_CFG)
 $(TARGET).CFLAGS 	+= -DPERIPHERALS_AUTO_INIT
 $(TARGET).CFLAGS 	+= $(FIXEDWING_INC)
 
-# would be better to auto-generate this
-$(TARGET).CFLAGS 	+= -DFIRMWARE=FIXEDWING
-
 $(TARGET).srcs 	+= mcu.c
 $(TARGET).srcs 	+= $(SRC_ARCH)/mcu_arch.c
 
@@ -52,26 +49,13 @@ endif
 
 $(TARGET).CFLAGS 	+= -DTRAFFIC_INFO
 
-#
-# LEDs
-#
-ifneq ($(ARCH), jsbsim)
-  $(TARGET).CFLAGS 	+= -DUSE_LED
-endif
-ifneq ($(ARCH), lpc21)
-  ifneq ($(ARCH), jsbsim)
-    $(TARGET).srcs 	+= $(SRC_ARCH)/led_hw.c
-  endif
-endif
+
 
 #
 # Sys-time
 #
 PERIODIC_FREQUENCY ?= 60
 $(TARGET).CFLAGS += -DPERIODIC_FREQUENCY=$(PERIODIC_FREQUENCY)
-
-TELEMETRY_FREQUENCY ?= 60
-$(TARGET).CFLAGS += -DTELEMETRY_FREQUENCY=$(TELEMETRY_FREQUENCY)
 
 $(TARGET).srcs   += mcu_periph/sys_time.c $(SRC_ARCH)/mcu_periph/sys_time_arch.c
 $(TARGET).CFLAGS += -DUSE_SYS_TIME
@@ -119,9 +103,13 @@ ns_srcs	   	+= $(SRC_FIRMWARE)/main.c
 #
 # LEDs
 #
+SYS_TIME_LED ?= none
 ns_CFLAGS 		+= -DUSE_LED
 ifneq ($(SYS_TIME_LED),none)
   ns_CFLAGS 	+= -DSYS_TIME_LED=$(SYS_TIME_LED)
+endif
+ifneq ($(ARCH), lpc21)
+  ns_srcs 	+= $(SRC_ARCH)/led_hw.c
 endif
 
 
@@ -163,17 +151,11 @@ ap_srcs 		+= state.c
 ap_srcs 		+= subsystems/settings.c
 ap_srcs 		+= $(SRC_ARCH)/subsystems/settings_arch.c
 
+# AIR DATA
+ap_srcs += subsystems/air_data.c
+
 # BARO
-ifeq ($(BOARD), umarim)
-ifeq ($(BOARD_VERSION), 1.0)
-ap_srcs 	+= boards/umarim/baro_board.c
-ap_CFLAGS += -DUSE_I2C1 -DUSE_ADS1114_1
-ap_CFLAGS += -DADS1114_I2C_DEV=i2c1
-ap_srcs 	+= peripherals/ads1114.c
-endif
-else ifeq ($(BOARD), lisa_l)
-ap_CFLAGS += -DUSE_I2C2
-endif
+include $(CFG_SHARED)/baro_board.makefile
 
 # ahrs frequencies if configured
 ifdef AHRS_PROPAGATE_FREQUENCY
@@ -202,10 +184,9 @@ sim.CFLAGS 		+= -DSITL
 sim.srcs 		+= $(SRC_ARCH)/sim_ap.c
 
 sim.CFLAGS 		+= -DDOWNLINK -DDOWNLINK_TRANSPORT=IvyTransport
-sim.srcs 		+= subsystems/datalink/downlink.c $(SRC_FIRMWARE)/datalink.c $(SRC_ARCH)/sim_gps.c $(SRC_ARCH)/ivy_transport.c $(SRC_ARCH)/sim_adc_generic.c
+sim.srcs 		+= subsystems/datalink/downlink.c $(SRC_FIRMWARE)/datalink.c $(SRC_ARCH)/ivy_transport.c
 
-sim.srcs 		+= subsystems/settings.c
-sim.srcs 		+= $(SRC_ARCH)/subsystems/settings_arch.c
+sim.srcs 		+= $(SRC_ARCH)/sim_gps.c $(SRC_ARCH)/sim_adc_generic.c
 
 # hack: always compile some of the sim functions, so ocaml sim does not complain about no-existing functions
 sim.srcs        += $(SRC_ARCH)/sim_ahrs.c $(SRC_ARCH)/sim_ir.c
@@ -243,10 +224,9 @@ jsbsim.CFLAGS 		+= -I/usr/include $(shell pkg-config glib-2.0 --cflags)
 jsbsim.LDFLAGS		+= $(shell pkg-config glib-2.0 --libs) -lglibivy -lm
 
 jsbsim.CFLAGS 		+= -DDOWNLINK -DDOWNLINK_TRANSPORT=IvyTransport
-jsbsim.srcs 		+= subsystems/datalink/downlink.c $(SRC_FIRMWARE)/datalink.c $(SRC_ARCH)/jsbsim_hw.c $(SRC_ARCH)/jsbsim_ir.c $(SRC_ARCH)/jsbsim_gps.c $(SRC_ARCH)/jsbsim_ahrs.c $(SRC_ARCH)/ivy_transport.c $(SRC_ARCH)/jsbsim_transport.c
+jsbsim.srcs 		+= subsystems/datalink/downlink.c $(SRC_FIRMWARE)/datalink.c $(SRC_ARCH)/ivy_transport.c
 
-jsbsim.srcs 		+= subsystems/settings.c
-jsbsim.srcs 		+= $(SRC_ARCH)/subsystems/settings_arch.c
+jsbsim.srcs 		+= $(SRC_ARCH)/jsbsim_hw.c $(SRC_ARCH)/jsbsim_ir.c $(SRC_ARCH)/jsbsim_gps.c $(SRC_ARCH)/jsbsim_ahrs.c $(SRC_ARCH)/jsbsim_transport.c
 
 ######################################################################
 ##

@@ -24,24 +24,16 @@
 CFG_SHARED=$(PAPARAZZI_SRC)/conf/firmwares/subsystems/shared
 CFG_ROTORCRAFT=$(PAPARAZZI_SRC)/conf/firmwares/subsystems/rotorcraft
 
-SRC_BOOZ_TEST=$(SRC_BOOZ)/test
-SRC_BOOZ_PRIV=booz_priv
-
 SRC_BOARD=boards/$(BOARD)
 SRC_FIRMWARE=firmwares/rotorcraft
 SRC_SUBSYSTEMS=subsystems
 
 SRC_ARCH=arch/$(ARCH)
 
-CFG_BOOZ=$(PAPARAZZI_SRC)/conf/firmwares/
-
 ROTORCRAFT_INC = -I$(SRC_FIRMWARE) -I$(SRC_BOARD)
 
 
 ap.ARCHDIR = $(ARCH)
-
-# would be better to auto-generate this
-$(TARGET).CFLAGS 	+= -DFIRMWARE=ROTORCRAFT
 
 ap.CFLAGS += $(ROTORCRAFT_INC)
 ap.CFLAGS += -DBOARD_CONFIG=$(BOARD_CFG) -DPERIPHERALS_AUTO_INIT
@@ -84,9 +76,6 @@ endif
 PERIODIC_FREQUENCY ?= 512
 ap.CFLAGS += -DPERIODIC_FREQUENCY=$(PERIODIC_FREQUENCY)
 
-TELEMETRY_FREQUENCY ?= 60
-ap.CFLAGS += -DTELEMETRY_FREQUENCY=$(TELEMETRY_FREQUENCY)
-
 #
 # Systime
 #
@@ -108,6 +97,9 @@ ap.srcs += $(SRC_ARCH)/subsystems/settings_arch.c
 
 ap.srcs += mcu_periph/uart.c
 ap.srcs += $(SRC_ARCH)/mcu_periph/uart_arch.c
+ifeq ($(ARCH), omap)
+ap.srcs   += $(SRC_ARCH)/serial_port.c
+endif
 
 # I2C is needed for speed controllers and barometers on lisa
 ifeq ($(TARGET), ap)
@@ -147,76 +139,11 @@ ap.srcs += subsystems/actuators.c
 #
 
 #
-# BARO
+# AIR DATA and BARO (if needed)
 #
-# booz baro
-ifeq ($(BOARD), booz)
-ap.srcs += $(SRC_BOARD)/baro_board.c
-else ifeq ($(BOARD), lisa_l)
-ap.CFLAGS += -DUSE_I2C2
-ap.srcs += $(SRC_BOARD)/baro_board.c
+ap.srcs += subsystems/air_data.c
 
-# Ardrone baro
-else ifeq ($(BOARD)$(BOARD_TYPE), ardroneraw)
-ap.srcs += $(SRC_BOARD)/baro_board.c
-else ifeq ($(BOARD)$(BOARD_TYPE), ardronesdk)
-ap.srcs += $(SRC_BOARD)/baro_board_dummy.c
-
-# Lisa/M baro
-else ifeq ($(BOARD), lisa_m)
-# defaults to i2c baro bmp085 on the board
-LISA_M_BARO ?= BARO_BOARD_BMP085
-  ifeq ($(LISA_M_BARO), BARO_MS5611_SPI)
-    include $(CFG_SHARED)/spi_master.makefile
-    ap.CFLAGS += -DUSE_SPI2 -DUSE_SPI_SLAVE3
-    ap.srcs += $(SRC_BOARD)/baro_ms5611_spi.c
-  else ifeq ($(LISA_M_BARO), BARO_MS5611_I2C)
-    ap.CFLAGS += -DUSE_I2C2
-    ap.srcs += $(SRC_BOARD)/baro_ms5611_i2c.c
-  else ifeq ($(LISA_M_BARO), BARO_BOARD_BMP085)
-    ap.srcs += $(SRC_BOARD)/baro_board.c
-	ap.CFLAGS += -DUSE_I2C2
-  endif
-  ap.CFLAGS += -D$(LISA_M_BARO)
-
-# Lia baro (no bmp onboard)
-else ifeq ($(BOARD), lia)
-# fixme, reuse the baro drivers in lisa_m dir
-LIA_BARO ?= BARO_MS5611_SPI
-  ifeq ($(LIA_BARO), BARO_MS5611_SPI)
-    include $(CFG_SHARED)/spi_master.makefile
-    ap.CFLAGS += -DUSE_SPI2 -DUSE_SPI_SLAVE3
-    ap.srcs += boards/lisa_m/baro_ms5611_spi.c
-  else ifeq ($(LIA_BARO), BARO_MS5611_I2C)
-    ap.CFLAGS += -DUSE_I2C2
-    ap.srcs += boards/lisa_m/baro_ms5611_i2c.c
-  endif
-  ap.CFLAGS += -D$(LIA_BARO)
-
-# navgo baro
-else ifeq ($(BOARD), navgo)
-include $(CFG_SHARED)/spi_master.makefile
-ap.CFLAGS += -DUSE_SPI_SLAVE0
-ap.CFLAGS += -DUSE_SPI1
-ap.srcs += peripherals/mcp355x.c
-ap.srcs += $(SRC_BOARD)/baro_board.c
-
-# krooz baro
-else ifeq ($(BOARD), krooz)
-ap.srcs += $(SRC_BOARD)/baro_board.c
-
-# apogee baro
-else ifeq ($(BOARD), apogee)
-ap.CFLAGS += -DUSE_I2C1
-ap.CFLAGS += -DMPL3115_I2C_DEV=i2c1
-ap.CFLAGS += -DMPL3115_ALT_MODE=0
-ap.srcs += peripherals/mpl3115.c
-ap.srcs += $(SRC_BOARD)/baro_board.c
-endif
-
-ifneq ($(BARO_LED),none)
-ap.CFLAGS += -DROTORCRAFT_BARO_LED=$(BARO_LED)
-endif
+include $(CFG_SHARED)/baro_board.makefile
 
 #
 # Analog Backend
@@ -291,17 +218,3 @@ ap.srcs += $(SRC_FIRMWARE)/guidance/guidance_v_adapt.c
 ap.srcs += $(SRC_FIRMWARE)/navigation.c
 ap.srcs += subsystems/navigation/common_flight_plan.c
 
-#
-# FMS  choice
-#
-# include booz2_fms_test_signal.makefile
-# or
-# include booz2_fms_datalink.makefile
-# or
-# nothing
-#
-ifeq ($(ARCH), omap)
-SRC_FMS=fms
-ap.CFLAGS += -I. -I$(SRC_FMS)
-ap.srcs   += $(SRC_FMS)/fms_serial_port.c
-endif

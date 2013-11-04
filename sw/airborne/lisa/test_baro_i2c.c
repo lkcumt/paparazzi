@@ -36,7 +36,11 @@
 #include "subsystems/datalink/downlink.h"
 
 #include "subsystems/sensors/baro.h"
+#include "subsystems/air_data.h"
 //#include "my_debug_servo.h"
+
+#define ABI_C
+#include "subsystems/abi.h"
 
 static inline void main_init( void );
 static inline void main_periodic_task( void );
@@ -78,6 +82,7 @@ static inline void main_periodic_task( void ) {
   RunOnceEvery(256, {DOWNLINK_SEND_ALIVE(DefaultChannel, DefaultDevice, 16, MD5SUM);});
   RunOnceEvery(256,
     {
+      uint16_t i2c2_queue_full_cnt        = i2c2.errors->queue_full_cnt;
       uint16_t i2c2_ack_fail_cnt          = i2c2.errors->ack_fail_cnt;
       uint16_t i2c2_miss_start_stop_cnt   = i2c2.errors->miss_start_stop_cnt;
       uint16_t i2c2_arb_lost_cnt          = i2c2.errors->arb_lost_cnt;
@@ -89,6 +94,7 @@ static inline void main_periodic_task( void ) {
       uint32_t i2c2_last_unexpected_event = i2c2.errors->last_unexpected_event;
       const uint8_t _bus2 = 2;
       DOWNLINK_SEND_I2C_ERRORS(DefaultChannel, DefaultDevice,
+                               &i2c2_queue_full_cnt,
                                &i2c2_ack_fail_cnt,
                                &i2c2_miss_start_stop_cnt,
                                &i2c2_arb_lost_cnt,
@@ -105,7 +111,7 @@ static inline void main_periodic_task( void ) {
 
 
 static inline void main_event_task( void ) {
-  BaroEvent(main_on_baro_abs, main_on_baro_diff);
+  BaroEvent();
 }
 
 
@@ -115,5 +121,5 @@ static inline void main_on_baro_diff(void) {
 }
 
 static inline void main_on_baro_abs(void) {
-  RunOnceEvery(5,{DOWNLINK_SEND_BARO_RAW(DefaultChannel, DefaultDevice, &baro.absolute, &baro.differential);});
+  RunOnceEvery(5,{DOWNLINK_SEND_BARO_RAW(DefaultChannel, DefaultDevice, &air_data.pressure, &air_data.differential);});
 }

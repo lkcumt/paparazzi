@@ -28,7 +28,8 @@
 #include "std.h"
 #include "mcu_periph/i2c.h"
 
-#define BARO_AMSYS_DT 0.05
+/// new measurement every baro_amsys_read_periodic
+#define BARO_AMSYS_DT BARO_AMSYS_READ_PERIODIC_PERIOD
 
 extern uint16_t baro_amsys_adc;
 // extern float baro_amsys_offset;
@@ -46,7 +47,5 @@ extern void baro_amsys_read_periodic( void );
 extern void baro_amsys_read_event( void );
 
 #define BaroAmsysEvent() { if (baro_amsys_i2c_trans.status == I2CTransSuccess) baro_amsys_read_event(); }
-
-#define BaroAmsysUpdate(_b) { if (baro_amsys_valid) { _b = baro_amsys_adc; baro_amsys_valid = FALSE; } }
 
 #endif // BARO_AMSYS_H

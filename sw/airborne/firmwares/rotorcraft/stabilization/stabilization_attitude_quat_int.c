@@ -25,6 +25,7 @@
 
 #include "firmwares/rotorcraft/stabilization.h"
 #include "firmwares/rotorcraft/stabilization/stabilization_attitude_rc_setpoint.h"
+#include "firmwares/rotorcraft/stabilization/stabilization_attitude_quat_transformations.h"
 
 #include <stdio.h>
 #include "math/pprz_algebra_float.h"
@@ -92,11 +93,27 @@ void stabilization_attitude_set_failsafe_setpoint(void) {
   PPRZ_ITRIG_SIN(stab_att_sp_quat.qz, heading2);
 }
 
-void stabilization_attitude_set_from_eulers_i(struct Int32Eulers *sp_euler) {
-  // copy euler setpoint for debugging
-  memcpy(&stab_att_sp_euler, sp_euler, sizeof(struct Int32Eulers));
-  INT32_QUAT_OF_EULERS(stab_att_sp_quat, *sp_euler);
-  INT32_QUAT_WRAP_SHORTEST(stab_att_sp_quat);
+void stabilization_attitude_set_rpy_setpoint_i(struct Int32Eulers *rpy) {
+  // stab_att_sp_euler.psi still used in ref..
+  memcpy(&stab_att_sp_euler, rpy, sizeof(struct Int32Eulers));
+
+  quat_from_rpy_cmd_i(&stab_att_sp_quat, &stab_att_sp_euler);
+}
+
+void stabilization_attitude_set_earth_cmd_i(struct Int32Vect2 *cmd, int32_t heading) {
+  // stab_att_sp_euler.psi still used in ref..
+  stab_att_sp_euler.psi = heading;
+
+  // compute sp_euler phi/theta for debugging/telemetry
+  /* Rotate horizontal commands to body frame by psi */
+  int32_t psi = stateGetNedToBodyEulers_i()->psi;
+  int32_t s_psi, c_psi;
+  PPRZ_ITRIG_SIN(s_psi, psi);
+  PPRZ_ITRIG_COS(c_psi, psi);
+  stab_att_sp_euler.phi = (-s_psi * cmd->x + c_psi * cmd->y) >> INT32_TRIG_FRAC;
+  stab_att_sp_euler.theta = -(c_psi * cmd->x + s_psi * cmd->y) >> INT32_TRIG_FRAC;
+
+  quat_from_earth_cmd_i(&stab_att_sp_quat, cmd, heading);
 }
 
 #define OFFSET_AND_ROUND(_a, _b) (((_a)+(1<<((_b)-1)))>>(_b))

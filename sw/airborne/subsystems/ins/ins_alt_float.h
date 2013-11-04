@@ -33,7 +33,7 @@
 #include <inttypes.h>
 #include "std.h"
 #include "state.h"
-
+#include "generated/modules.h"
 
 #if USE_BAROMETER
 #ifdef BARO_MS5534A
@@ -56,9 +56,9 @@
 #include "modules/sensors/baro_amsys.h"
 #endif
 
-extern int32_t ins_qfe;
-extern float   ins_baro_alt;
-extern bool_t  ins_baro_initialised;
+extern float ins_qfe;
+extern float ins_baro_alt;
+extern bool_t ins_baro_initialized;
 #endif //USE_BAROMETER
 
 extern float ins_alt; ///< estimated altitude above MSL in meters

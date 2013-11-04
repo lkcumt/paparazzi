@@ -82,6 +82,7 @@ SUBDIRS = $(PPRZCENTER) $(MISC) $(LOGALIZER)
 # xml files used as input for header generation
 #
 MESSAGES_XML = $(CONF)/messages.xml
+ABI_XML = $(CONF)/abi.xml
 UBX_XML = $(CONF)/ubx.xml
 MTK_XML = $(CONF)/mtk.xml
 XSENS_XML = $(CONF)/xsens_MTi-G.xml
@@ -113,7 +114,7 @@ update_google_version:
 
 conf: conf/conf.xml conf/control_panel.xml conf/maps.xml
 
-conf/%.xml :conf/%.xml.example
+conf/%.xml :conf/%_example.xml
 	[ -L $@ ] || [ -f $@ ] || cp $< $@
 
 
@@ -218,7 +219,7 @@ $(DL_PROTOCOL2_H) : $(MESSAGES_XML) tools
 	$(Q)mv $($@_TMP) $@
 	$(Q)chmod a+r $@
 
-$(ABI_MESSAGES_H) : $(MESSAGES_XML) tools
+$(ABI_MESSAGES_H) : $(ABI_XML) tools
 	@echo GENERATE $@
 	$(eval $@_TMP := $(shell $(MKTEMP)))
 	$(Q)PAPARAZZI_SRC=$(PAPARAZZI_SRC) PAPARAZZI_HOME=$(PAPARAZZI_HOME) $(TOOLS)/gen_abi.out $< airborne > $($@_TMP)
@@ -247,6 +248,15 @@ paparazzi:
 	cat src/paparazzi | sed s#OCAMLRUN#$(OCAMLRUN)# | sed s#OCAML#$(OCAML)# > $@
 	chmod a+x $@
 
+
+#
+# doxygen html documentation
+#
+dox:
+	$(Q)PAPARAZZI_HOME=$(PAPARAZZI_HOME) sw/tools/doxygen_gen/gen_modules_doc.py -pv
+	@echo "Generationg doxygen html documentation in doc/generated/html"
+	$(Q)( cat Doxyfile ; echo "PROJECT_NUMBER=$(./paparazzi_version)"; echo "QUIET=YES") | doxygen -
+	@echo "Done. Open doc/generated/html/index.html in your browser to view it."
 
 #
 # Cleaning
@@ -285,7 +295,7 @@ ab_clean:
 
 replace_current_conf_xml:
 	test conf/conf.xml && mv conf/conf.xml conf/conf.xml.backup.$(BUILD_DATETIME)
-	cp conf/tests_conf.xml conf/conf.xml
+	cp conf/conf_tests.xml conf/conf.xml
 
 restore_conf_xml:
 	test conf/conf.xml.backup.$(BUILD_DATETIME) && mv conf/conf.xml.backup.$(BUILD_DATETIME) conf/conf.xml
@@ -296,7 +306,7 @@ run_tests:
 test: all replace_current_conf_xml run_tests restore_conf_xml
 
 
-.PHONY: all print_build_version update_google_version ground_segment ground_segment.opt \
+.PHONY: all print_build_version update_google_version dox ground_segment ground_segment.opt \
 subdirs $(SUBDIRS) conf ext libpprz multimon cockpit cockpit.opt tmtc tmtc.opt tools\
 static sim_static lpctools commands \
 clean cleanspaces ab_clean dist_clean distclean dist_clean_irreversible \

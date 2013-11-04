@@ -30,6 +30,8 @@
 
 #define MODULES_C
 
+#define ABI_C
+
 #include <math.h>
 
 #include "firmwares/fixedwing/main_ap.h"
@@ -51,7 +53,8 @@
 #if USE_AHRS_ALIGNER
 #include "subsystems/ahrs/ahrs_aligner.h"
 #endif
-#if USE_BAROMETER
+#include "subsystems/air_data.h"
+#if USE_BARO_BOARD
 #include "subsystems/sensors/baro.h"
 #endif
 #include "subsystems/ins.h"
@@ -81,22 +84,40 @@
 #if defined RADIO_CONTROL || defined RADIO_CONTROL_AUTO1
 #include "rc_settings.h"
 #endif
+#include "subsystems/abi.h"
 
 #include "led.h"
+
+#ifdef USE_NPS
+#include "nps_autopilot.h"
+#endif
+
+/* Default trim commands for roll, pitch and yaw */
+#ifndef COMMAND_ROLL_TRIM
+#define COMMAND_ROLL_TRIM 0
+#endif
+
+#ifndef COMMAND_PITCH_TRIM
+#define COMMAND_PITCH_TRIM 0
+#endif
+
+#ifndef COMMAND_YAW_TRIM
+#define COMMAND_YAW_TRIM 0
+#endif
 
 /* if PRINT_CONFIG is defined, print some config options */
 PRINT_CONFIG_VAR(PERIODIC_FREQUENCY)
 PRINT_CONFIG_VAR(NAVIGATION_FREQUENCY)
 PRINT_CONFIG_VAR(CONTROL_FREQUENCY)
 
-#ifndef TELEMETRY_FREQUENCY
-#define TELEMETRY_FREQUENCY 60
-#endif
+/* TELEMETRY_FREQUENCY is defined in generated/periodic_telemetry.h
+ * defaults to 60Hz or set by TELEMETRY_FREQUENCY configure option in airframe file
+ */
 PRINT_CONFIG_VAR(TELEMETRY_FREQUENCY)
 
-#ifndef MODULES_FREQUENCY
-#define MODULES_FREQUENCY 60
-#endif
+/* MODULES_FREQUENCY is defined in generated/modules.h
+ * according to main_freq parameter set for modules in airframe file
+ */
 PRINT_CONFIG_VAR(MODULES_FREQUENCY)
 
 
@@ -120,11 +141,6 @@ volatile uint8_t ahrs_timeout_counter = 0;
 
 #if USE_GPS
 static inline void on_gps_solution( void );
-#endif
-
-#if USE_BAROMETER
-static inline void on_baro_abs_event( void );
-static inline void on_baro_dif_event( void );
 #endif
 
 // what version is this ????
@@ -166,6 +182,9 @@ void init_ap( void ) {
 
 #if USE_IMU
   imu_init();
+#if USE_IMU_FLOAT
+  imu_float_init();
+#endif
 #endif
 
 #if USE_AHRS_ALIGNER
@@ -176,7 +195,8 @@ void init_ap( void ) {
   ahrs_init();
 #endif
 
-#if USE_BAROMETER
+  air_data_init();
+#if USE_BARO_BOARD
   baro_init();
 #endif
 
@@ -230,6 +250,13 @@ void init_ap( void ) {
 #ifdef TRAFFIC_INFO
   traffic_info_init();
 #endif
+
+  /* set initial trim values.
+   * these are passed to fbw via inter_mcu.
+   */
+  ap_state->command_roll_trim = COMMAND_ROLL_TRIM;
+  ap_state->command_pitch_trim = COMMAND_PITCH_TRIM;
+  ap_state->command_yaw_trim = COMMAND_YAW_TRIM;
 }
 
 
@@ -552,11 +579,11 @@ void sensors_task( void ) {
 #endif // USE_IMU
 
   //FIXME: this is just a kludge
-#if USE_AHRS && defined SITL
+#if USE_AHRS && defined SITL && !USE_NPS
   ahrs_propagate();
 #endif
 
-#if USE_BAROMETER
+#if USE_BARO_BOARD
   baro_periodic();
 #endif
 
@@ -626,8 +653,8 @@ void event_task_ap( void ) {
   GpsEvent(on_gps_solution);
 #endif /* USE_GPS */
 
-#if USE_BAROMETER
-  BaroEvent(on_baro_abs_event, on_baro_dif_event);
+#if USE_BARO_BOARD
+  BaroEvent();
 #endif
 
   DatalinkEvent();
@@ -649,7 +676,6 @@ void event_task_ap( void ) {
   if (new_ins_attitude > 0)
   {
     attitude_loop();
-    //LED_TOGGLE(3);
     new_ins_attitude = 0;
   }
 #endif
@@ -698,10 +724,6 @@ static inline void on_gyro_event( void ) {
   ahrs_propagate();
   ahrs_update_accel();
 
-#ifdef AHRS_TRIGGERED_ATTITUDE_LOOP
-  new_ins_attitude = 1;
-#endif
-
 #else //PERIODIC_FREQUENCY
   static uint8_t _reduced_propagation_rate = 0;
   static uint8_t _reduced_correction_rate = 0;
@@ -714,6 +736,7 @@ static inline void on_gyro_event( void ) {
   _reduced_propagation_rate++;
   if (_reduced_propagation_rate < (PERIODIC_FREQUENCY / AHRS_PROPAGATE_FREQUENCY))
   {
+    return;
   }
   else
   {
@@ -735,12 +758,16 @@ static inline void on_gyro_event( void ) {
       ImuScaleAccel(imu);
       ahrs_update_accel();
     }
-
-#ifdef AHRS_TRIGGERED_ATTITUDE_LOOP
-    new_ins_attitude = 1;
-#endif
   }
 #endif //PERIODIC_FREQUENCY
+
+#if defined SITL && USE_NPS
+  if (nps_bypass_ahrs) sim_overwrite_ahrs();
+#endif
+
+#ifdef AHRS_TRIGGERED_ATTITUDE_LOOP
+  new_ins_attitude = 1;
+#endif
 
 }
 
@@ -758,14 +785,3 @@ static inline void on_mag_event(void)
 
 #endif // USE_AHRS
 
-#if USE_BAROMETER
-
-static inline void on_baro_abs_event( void ) {
-  ins_update_baro();
-}
-
-static inline void on_baro_dif_event( void ) {
-
-}
-
-#endif // USE_BAROMETER

@@ -31,6 +31,9 @@
 /build.properties
 /META-INF
 
+# JetBrains (PyCharm, etc) IDE project files
+.idea
+
 
 /var
 /dox
@@ -40,6 +43,7 @@
 # /conf/
 /conf/conf.xml
 /conf/conf.xml.20*
+/conf/conf_personal.xml.20*
 /conf/control_panel.xml
 /conf/%gconf.xml
 /conf/maps_data/*

@@ -134,6 +134,28 @@
 #define PERIODIC_SEND_PPM(_trans, _dev) {}
 #endif
 
+#ifdef USE_SUPERBITRF
+#include "subsystems/datalink/superbitrf.h"
+#define PERIODIC_SEND_SUPERBITRF(_trans, _dev) {        \
+    DOWNLINK_SEND_SUPERBITRF(_trans, _dev,              \
+                      &superbitrf.status,               \
+                      &superbitrf.cyrf6936.status,      \
+                      &superbitrf.irq_count,            \
+                      &superbitrf.rx_packet_count,      \
+                      &superbitrf.tx_packet_count,      \
+                      &superbitrf.transfer_timeouts,    \
+                      &superbitrf.resync_count,         \
+                      &superbitrf.uplink_count,         \
+                      &superbitrf.rc_count,             \
+                      &superbitrf.timing1,              \
+                      &superbitrf.timing2,              \
+                      &superbitrf.bind_mfg_id32,        \
+                      6,                                \
+                      superbitrf.cyrf6936.mfg_id);}
+#else
+#define PERIODIC_SEND_SUPERBITRF(_trans, _dev) {}
+#endif
+
 #ifdef ACTUATORS
 #define PERIODIC_SEND_ACTUATORS(_trans, _dev) DOWNLINK_SEND_ACTUATORS(_trans, _dev, ACTUATORS_NB, actuators)
 #else
@@ -190,11 +212,11 @@
                   &electrical.current);               \
   }
 
-#include "subsystems/sensors/baro.h"
-#define PERIODIC_SEND_BARO_RAW(_trans, _dev) {         \
-    DOWNLINK_SEND_BARO_RAW(_trans, _dev,               \
-                           &baro.absolute,      \
-                           &baro.differential); \
+#include "subsystems/air_data.h"
+#define PERIODIC_SEND_BARO_RAW(_trans, _dev) {      \
+    DOWNLINK_SEND_BARO_RAW(_trans, _dev,            \
+                           &air_data.pressure,      \
+                           &air_data.differential); \
   }
 
 
@@ -281,9 +303,9 @@
       &stab_att_ref_euler.phi,                            \
       &stab_att_ref_euler.theta,                          \
       &stab_att_ref_euler.psi,                            \
-      &stabilization_att_sum_err_eulers.phi,              \
-      &stabilization_att_sum_err_eulers.theta,            \
-      &stabilization_att_sum_err_eulers.psi,              \
+      &stabilization_att_sum_err.phi,              \
+      &stabilization_att_sum_err.theta,            \
+      &stabilization_att_sum_err.psi,              \
       &stabilization_att_fb_cmd[COMMAND_ROLL],            \
       &stabilization_att_fb_cmd[COMMAND_PITCH],           \
       &stabilization_att_fb_cmd[COMMAND_YAW],             \
@@ -416,6 +438,7 @@
 #ifndef AHRS_FLOAT
 #define PERIODIC_SEND_AHRS_QUAT_INT(_trans, _dev) {   \
     DOWNLINK_SEND_AHRS_QUAT_INT(_trans, _dev,         \
+                  &ahrs_impl.weight,                  \
                   &ahrs_impl.ltp_to_imu_quat.qi,      \
                   &ahrs_impl.ltp_to_imu_quat.qx,      \
                   &ahrs_impl.ltp_to_imu_quat.qy,      \
@@ -561,92 +584,104 @@
 #define PERIODIC_SEND_HFF_GPS(_trans, _dev) {}
 #endif
 
-#define PERIODIC_SEND_GUIDANCE_H_INT(_trans, _dev) {   \
-  DOWNLINK_SEND_GUIDANCE_H_INT(_trans, _dev,           \
-                               &guidance_h_pos_sp.x,   \
-                               &guidance_h_pos_sp.y,   \
-                               &guidance_h_pos_ref.x,  \
-                               &guidance_h_pos_ref.y,  \
-                               &ins_ltp_pos.x,         \
-                               &ins_ltp_pos.y);        \
+#define PERIODIC_SEND_GUIDANCE_H_INT(_trans, _dev) {                \
+    DOWNLINK_SEND_GUIDANCE_H_INT(_trans, _dev,                      \
+                                 &guidance_h_pos_sp.x,              \
+                                 &guidance_h_pos_sp.y,              \
+                                 &guidance_h_pos_ref.x,             \
+                                 &guidance_h_pos_ref.y,             \
+                                 &(stateGetPositionNed_i()->x),     \
+                                 &(stateGetPositionNed_i()->y));    \
   }
 
 #define PERIODIC_SEND_INS_Z(_trans, _dev) {				\
-    DOWNLINK_SEND_INS_Z(_trans, _dev,					\
-                &ins_baro_alt,				\
-                &ins_ltp_pos.z,			\
-                &ins_ltp_speed.z,			\
-                &ins_ltp_accel.z);			\
+  DOWNLINK_SEND_INS_Z(_trans, _dev,                     \
+                      &ins_impl.baro_z,                 \
+                      &(stateGetPositionNed_i()->z),    \
+                      &(stateGetSpeedNed_i()->z),       \
+                      &(stateGetAccelNed_i()->z));      \
   }
 
-#define PERIODIC_SEND_INS(_trans, _dev) {			\
-    DOWNLINK_SEND_INS(_trans, _dev,				\
-                       &ins_ltp_pos.x,		\
-                       &ins_ltp_pos.y,      \
-                       &ins_ltp_pos.z,		\
-                       &ins_ltp_speed.x,	\
-                       &ins_ltp_speed.y,	\
-                       &ins_ltp_speed.z,	\
-                       &ins_ltp_accel.x,	\
-                       &ins_ltp_accel.y,	\
-                       &ins_ltp_accel.z);	\
+#define PERIODIC_SEND_INS(_trans, _dev) {                   \
+    struct NedCoor_i* ltp_pos = stateGetPositionNed_i();    \
+    struct NedCoor_i* ltp_speed = stateGetSpeedNed_i();     \
+    struct NedCoor_i* ltp_accel = stateGetAccelNed_i();     \
+    DOWNLINK_SEND_INS(_trans, _dev,                         \
+                      &(ltp_pos->x),                        \
+                      &(ltp_pos->y),                        \
+                      &(ltp_pos->z),                        \
+                      &(ltp_speed->x),                      \
+                      &(ltp_speed->y),                      \
+                      &(ltp_speed->z),                      \
+                      &(ltp_accel->x),                      \
+                      &(ltp_accel->y),                      \
+                      &(ltp_accel->z));                     \
   }
 
-#define PERIODIC_SEND_INS_REF(_trans, _dev) {       \
-    if (ins_ltp_initialised)                        \
-      DOWNLINK_SEND_INS_REF(_trans, _dev,           \
-                            &ins_ltp_def.ecef.x,    \
-                            &ins_ltp_def.ecef.y,    \
-                            &ins_ltp_def.ecef.z,    \
-                            &ins_ltp_def.lla.lat,   \
-                            &ins_ltp_def.lla.lon,   \
-                            &ins_ltp_def.lla.alt,   \
-                            &ins_ltp_def.hmsl,		\
-                            &ins_qfe);				\
+#define PERIODIC_SEND_INS_REF(_trans, _dev) {               \
+    if (state.ned_initialized_i) {                          \
+      DOWNLINK_SEND_INS_REF(_trans, _dev,                   \
+                            &state.ned_origin_i.ecef.x,     \
+                            &state.ned_origin_i.ecef.y,     \
+                            &state.ned_origin_i.ecef.z,     \
+                            &state.ned_origin_i.lla.lat,    \
+                            &state.ned_origin_i.lla.lon,    \
+                            &state.ned_origin_i.lla.alt,    \
+                            &state.ned_origin_i.hmsl,		\
+                            &ins_impl.qfe);                 \
+    }                                                       \
   }
 
 #define PERIODIC_SEND_VERT_LOOP(_trans, _dev) {				\
-    DOWNLINK_SEND_VERT_LOOP(_trans, _dev,				\
-                  &guidance_v_z_sp,		\
-                  &guidance_v_zd_sp,		\
-                  &ins_ltp_pos.z,			\
-                  &ins_ltp_speed.z,		\
-                  &ins_ltp_accel.z,		\
-                  &guidance_v_z_ref,		\
-                  &guidance_v_zd_ref,		\
-                  &guidance_v_zdd_ref,		\
-                  &gv_adapt_X,			\
-                  &gv_adapt_P,			\
-                  &gv_adapt_Xmeas,			\
-                  &guidance_v_z_sum_err,		\
-                  &guidance_v_ff_cmd,		\
-                  &guidance_v_fb_cmd,		\
-                  &guidance_v_delta_t);		\
+    DOWNLINK_SEND_VERT_LOOP(_trans, _dev,                   \
+                            &guidance_v_z_sp,               \
+                            &guidance_v_zd_sp,              \
+                            &(stateGetPositionNed_i()->z),  \
+                            &(stateGetSpeedNed_i()->z),     \
+                            &(stateGetAccelNed_i()->z),     \
+                            &guidance_v_z_ref,              \
+                            &guidance_v_zd_ref,             \
+                            &guidance_v_zdd_ref,            \
+                            &gv_adapt_X,                    \
+                            &gv_adapt_P,                    \
+                            &gv_adapt_Xmeas,                \
+                            &guidance_v_z_sum_err,          \
+                            &guidance_v_ff_cmd,             \
+                            &guidance_v_fb_cmd,             \
+                            &guidance_v_delta_t);           \
+  }
+
+#define PERIODIC_SEND_TUNE_VERT(_trans, _dev) {     \
+    DOWNLINK_SEND_TUNE_VERT(_trans, _dev,           \
+                            &guidance_v_z_sp,		\
+                            &ins_ltp_pos.z,			\
+                            &guidance_v_z_ref,		\
+                            &guidance_v_zd_ref);   \
   }
 
 #define PERIODIC_SEND_HOVER_LOOP(_trans, _dev) {				\
-    DOWNLINK_SEND_HOVER_LOOP(_trans, _dev,				\
-                   &guidance_h_pos_sp.x,		\
-                   &guidance_h_pos_sp.y,		\
-                   &ins_ltp_pos.x,			\
-                   &ins_ltp_pos.y,			\
-                   &ins_ltp_speed.x,		\
-                   &ins_ltp_speed.y,		\
-                   &ins_ltp_accel.x,		\
-                   &ins_ltp_accel.y,		\
-                   &guidance_h_pos_err.x,		\
-                   &guidance_h_pos_err.y,		\
-                   &guidance_h_speed_err.x,	\
-                   &guidance_h_speed_err.y,	\
-                   &guidance_h_pos_err_sum.x,	\
-                   &guidance_h_pos_err_sum.y,	\
-                   &guidance_h_nav_err.x,	\
-                   &guidance_h_nav_err.y,	\
-                   &guidance_h_command_earth.x,	\
-                   &guidance_h_command_earth.y,	\
-                   &guidance_h_command_body.phi,	\
-                   &guidance_h_command_body.theta, \
-                   &guidance_h_command_body.psi);	\
+    DOWNLINK_SEND_HOVER_LOOP(_trans, _dev,                      \
+                             &guidance_h_pos_sp.x,              \
+                             &guidance_h_pos_sp.y,              \
+                             &(stateGetPositionNed_i()->x),     \
+                             &(stateGetPositionNed_i()->y),     \
+                             &(stateGetSpeedNed_i()->x),        \
+                             &(stateGetSpeedNed_i()->y),        \
+                             &(stateGetAccelNed_i()->x),        \
+                             &(stateGetAccelNed_i()->y),        \
+                             &guidance_h_pos_err.x,             \
+                             &guidance_h_pos_err.y,             \
+                             &guidance_h_speed_err.x,           \
+                             &guidance_h_speed_err.y,           \
+                             &guidance_h_trim_att_integrator.x, \
+                             &guidance_h_trim_att_integrator.y, \
+                             &guidance_h_nav_err.x,             \
+                             &guidance_h_nav_err.y,             \
+                             &guidance_h_cmd_earth.x,           \
+                             &guidance_h_cmd_earth.y,           \
+                             &guidance_h_cmd_earth.x,           \
+                             &guidance_h_cmd_earth.y,           \
+                             &guidance_h_heading_sp);           \
   }
 
 #define PERIODIC_SEND_GUIDANCE_H_REF(_trans, _dev) { \
@@ -677,7 +712,7 @@
                                  &guidance_h_pos_sp.y,                  \
                                  &guidance_h_pos_sp.x,                  \
                                  &carrot_up,                            \
-                                 &guidance_h_command_body.psi,          \
+                                 &guidance_h_heading_sp,          \
                                  &stabilization_cmd[COMMAND_THRUST],    \
                                  &autopilot_flight_time);               \
   }
@@ -774,6 +809,7 @@
 
 #ifdef USE_I2C0
 #define PERIODIC_SEND_I2C0_ERRORS(_trans, _dev) {                             \
+    uint16_t i2c0_queue_full_cnt        = i2c0.errors->queue_full_cnt;        \
     uint16_t i2c0_ack_fail_cnt          = i2c0.errors->ack_fail_cnt;          \
     uint16_t i2c0_miss_start_stop_cnt   = i2c0.errors->miss_start_stop_cnt;   \
     uint16_t i2c0_arb_lost_cnt          = i2c0.errors->arb_lost_cnt;          \
@@ -785,6 +821,7 @@
     uint32_t i2c0_last_unexpected_event = i2c0.errors->last_unexpected_event; \
     const uint8_t _bus0 = 0;                                            \
     DOWNLINK_SEND_I2C_ERRORS(_trans, _dev,                  \
+                             &i2c0_queue_full_cnt,          \
                              &i2c0_ack_fail_cnt,            \
                              &i2c0_miss_start_stop_cnt,     \
                              &i2c0_arb_lost_cnt,            \
@@ -802,6 +839,7 @@
 
 #ifdef USE_I2C1
 #define PERIODIC_SEND_I2C1_ERRORS(_trans, _dev) {                             \
+    uint16_t i2c1_queue_full_cnt        = i2c1.errors->queue_full_cnt;        \
     uint16_t i2c1_ack_fail_cnt          = i2c1.errors->ack_fail_cnt;          \
     uint16_t i2c1_miss_start_stop_cnt   = i2c1.errors->miss_start_stop_cnt;   \
     uint16_t i2c1_arb_lost_cnt          = i2c1.errors->arb_lost_cnt;          \
@@ -813,6 +851,7 @@
     uint32_t i2c1_last_unexpected_event = i2c1.errors->last_unexpected_event; \
     const uint8_t _bus1 = 1;                                            \
     DOWNLINK_SEND_I2C_ERRORS(_trans, _dev,                  \
+                             &i2c1_queue_full_cnt,          \
                              &i2c1_ack_fail_cnt,            \
                              &i2c1_miss_start_stop_cnt,     \
                              &i2c1_arb_lost_cnt,            \
@@ -830,6 +869,7 @@
 
 #ifdef USE_I2C2
 #define PERIODIC_SEND_I2C2_ERRORS(_trans, _dev) {                             \
+    uint16_t i2c2_queue_full_cnt        = i2c2.errors->queue_full_cnt;        \
     uint16_t i2c2_ack_fail_cnt          = i2c2.errors->ack_fail_cnt;          \
     uint16_t i2c2_miss_start_stop_cnt   = i2c2.errors->miss_start_stop_cnt;   \
     uint16_t i2c2_arb_lost_cnt          = i2c2.errors->arb_lost_cnt;          \
@@ -841,6 +881,7 @@
     uint32_t i2c2_last_unexpected_event = i2c2.errors->last_unexpected_event; \
     const uint8_t _bus2 = 2;                                            \
     DOWNLINK_SEND_I2C_ERRORS(_trans, _dev,                  \
+                             &i2c2_queue_full_cnt,          \
                              &i2c2_ack_fail_cnt,            \
                              &i2c2_miss_start_stop_cnt,     \
                              &i2c2_arb_lost_cnt,            \
@@ -856,6 +897,36 @@
 #define PERIODIC_SEND_I2C2_ERRORS(_trans, _dev) {}
 #endif
 
+#ifdef USE_I2C3
+#define PERIODIC_SEND_I2C3_ERRORS(_trans, _dev) {                       \
+    uint16_t i2c3_queue_full_cnt        = i2c3.errors->queue_full_cnt;  \
+    uint16_t i2c3_ack_fail_cnt          = i2c3.errors->ack_fail_cnt;    \
+    uint16_t i2c3_miss_start_stop_cnt   = i2c3.errors->miss_start_stop_cnt; \
+    uint16_t i2c3_arb_lost_cnt          = i2c3.errors->arb_lost_cnt;    \
+    uint16_t i2c3_over_under_cnt        = i2c3.errors->over_under_cnt;  \
+    uint16_t i2c3_pec_recep_cnt         = i2c3.errors->pec_recep_cnt;   \
+    uint16_t i2c3_timeout_tlow_cnt      = i2c3.errors->timeout_tlow_cnt; \
+    uint16_t i2c3_smbus_alert_cnt       = i2c3.errors->smbus_alert_cnt; \
+    uint16_t i2c3_unexpected_event_cnt  = i2c3.errors->unexpected_event_cnt; \
+    uint32_t i2c3_last_unexpected_event = i2c3.errors->last_unexpected_event; \
+    const uint8_t _bus3 = 3;                                            \
+    DOWNLINK_SEND_I2C_ERRORS(_trans, _dev,                              \
+                             &i2c3_queue_full_cnt,                      \
+                             &i2c3_ack_fail_cnt,                        \
+                             &i2c3_miss_start_stop_cnt,                 \
+                             &i2c3_arb_lost_cnt,                        \
+                             &i2c3_over_under_cnt,                      \
+                             &i2c3_pec_recep_cnt,                       \
+                             &i2c3_timeout_tlow_cnt,                    \
+                             &i2c3_smbus_alert_cnt,                     \
+                             &i2c3_unexpected_event_cnt,                \
+                             &i2c3_last_unexpected_event,               \
+                             &_bus3);                                   \
+  }
+#else
+#define PERIODIC_SEND_I2C3_ERRORS(_trans, _dev) {}
+#endif
+
 #ifndef SITL
 #define PERIODIC_SEND_I2C_ERRORS(_trans, _dev) {        \
     static uint8_t _i2c_nb_cnt = 0;                     \
@@ -866,6 +937,8 @@
         PERIODIC_SEND_I2C1_ERRORS(_trans, _dev); break; \
       case 2:                                           \
         PERIODIC_SEND_I2C2_ERRORS(_trans, _dev); break; \
+      case 3:                                           \
+        PERIODIC_SEND_I2C3_ERRORS(_trans, _dev); break; \
       default:                                          \
         break;                                          \
     }                                                   \
@@ -896,34 +969,35 @@
 #ifdef ARDRONE2_RAW
 #include "navdata.h"
 #define PERIODIC_SEND_ARDRONE_NAVDATA(_trans, _dev) DOWNLINK_SEND_ARDRONE_NAVDATA(_trans, _dev, \
-	&navdata->taille, \
-	&navdata->nu_trame, \
-	&navdata->ax, \
-	&navdata->ay, \
-	&navdata->az, \
-	&navdata->vx, \
-	&navdata->vy, \
-	&navdata->vz, \
-	&navdata->temperature_acc, \
-	&navdata->temperature_gyro, \
-	&navdata->ultrasound, \
-	&navdata->us_debut_echo, \
-	&navdata->us_fin_echo, \
-	&navdata->us_association_echo, \
-	&navdata->us_distance_echo, \
-	&navdata->us_curve_time, \
-	&navdata->us_curve_value, \
-	&navdata->us_curve_ref, \
-	&navdata->nb_echo, \
-	&navdata->sum_echo, \
-	&navdata->gradient, \
-	&navdata->flag_echo_ini, \
-	&navdata->pressure, \
-	&navdata->temperature_pressure, \
-	&navdata->mx, \
-	&navdata->my, \
-	&navdata->mz, \
-	&navdata->chksum \
+	&navdata.taille, \
+	&navdata.nu_trame, \
+	&navdata.ax, \
+	&navdata.ay, \
+	&navdata.az, \
+	&navdata.vx, \
+	&navdata.vy, \
+	&navdata.vz, \
+	&navdata.temperature_acc, \
+	&navdata.temperature_gyro, \
+	&navdata.ultrasound, \
+	&navdata.us_debut_echo, \
+	&navdata.us_fin_echo, \
+	&navdata.us_association_echo, \
+	&navdata.us_distance_echo, \
+	&navdata.us_curve_time, \
+	&navdata.us_curve_value, \
+	&navdata.us_curve_ref, \
+	&navdata.nb_echo, \
+	&navdata.sum_echo, \
+	&navdata.gradient, \
+	&navdata.flag_echo_ini, \
+	&navdata.pressure, \
+	&navdata.temperature_pressure, \
+	&navdata.mx, \
+	&navdata.my, \
+	&navdata.mz, \
+	&navdata.chksum, \
+    &nav_port.checksum_errors \
 	)
 #else
 #define PERIODIC_SEND_ARDRONE_NAVDATA(_trans, _dev) {}
@@ -938,10 +1012,13 @@
 #ifdef USE_UART1
 #define PERIODIC_SEND_UART1_ERRORS(_trans, _dev) {   \
     const uint8_t _bus1 = 1;                         \
+    uint16_t ore = uart1.ore;                        \
+    uint16_t ne_err = uart1.ne_err;                  \
+    uint16_t fe_err = uart1.fe_err;                  \
     DOWNLINK_SEND_UART_ERRORS(_trans, _dev,          \
-                             &uart1.ore,             \
-                             &uart1.ne_err,          \
-                             &uart1.fe_err,          \
+                             &ore,                   \
+                             &ne_err,                \
+                             &fe_err,                \
                              &_bus1);                \
   }
 #else
@@ -951,10 +1028,13 @@
 #ifdef USE_UART2
 #define PERIODIC_SEND_UART2_ERRORS(_trans, _dev) {   \
     const uint8_t _bus2 = 2;                         \
+    uint16_t ore = uart2.ore;                        \
+    uint16_t ne_err = uart2.ne_err;                  \
+    uint16_t fe_err = uart2.fe_err;                  \
     DOWNLINK_SEND_UART_ERRORS(_trans, _dev,          \
-                             &uart2.ore,             \
-                             &uart2.ne_err,          \
-                             &uart2.fe_err,          \
+                             &ore,                   \
+                             &ne_err,                \
+                             &fe_err,                \
                              &_bus2);                \
   }
 #else
@@ -964,10 +1044,13 @@
 #ifdef USE_UART3
 #define PERIODIC_SEND_UART3_ERRORS(_trans, _dev) {   \
     const uint8_t _bus3 = 3;                         \
+    uint16_t ore = uart3.ore;                        \
+    uint16_t ne_err = uart3.ne_err;                  \
+    uint16_t fe_err = uart3.fe_err;                  \
     DOWNLINK_SEND_UART_ERRORS(_trans, _dev,          \
-                             &uart3.ore,             \
-                             &uart3.ne_err,          \
-                             &uart3.fe_err,          \
+                             &ore,                   \
+                             &ne_err,                \
+                             &fe_err,                \
                              &_bus3);                \
   }
 #else
@@ -977,10 +1060,13 @@
 #ifdef USE_UART5
 #define PERIODIC_SEND_UART5_ERRORS(_trans, _dev) {   \
     const uint8_t _bus5 = 5;                         \
+    uint16_t ore = uart5.ore;                        \
+    uint16_t ne_err = uart5.ne_err;                  \
+    uint16_t fe_err = uart5.fe_err;                  \
     DOWNLINK_SEND_UART_ERRORS(_trans, _dev,          \
-                             &uart5.ore,             \
-                             &uart5.ne_err,          \
-                             &uart5.fe_err,          \
+                             &ore,                   \
+                             &ne_err,                \
+                             &fe_err,                \
                              &_bus5);                \
   }
 #else
@@ -1008,6 +1094,16 @@
   }
 #else
 #define PERIODIC_SEND_UART_ERRORS(_trans, _dev) {}
+#endif
+
+#ifdef USE_GX3
+#define PERIODIC_SEND_GX3_INFO(_trans, _dev) DOWNLINK_SEND_GX3_INFO(_trans, _dev,\
+    &ahrs_impl.gx3_freq,			\
+    &ahrs_impl.gx3_packet.chksm_error,	\
+    &ahrs_impl.gx3_packet.hdr_error,	\
+    &ahrs_impl.gx3_chksm)
+#else
+#define PERIODIC_SEND_GX3_INFO(_trans, _dev) {}
 #endif
 
 #endif /* TELEMETRY_H */

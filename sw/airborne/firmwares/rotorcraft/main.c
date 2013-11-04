@@ -28,6 +28,8 @@
 
 #define MODULES_C
 
+#define ABI_C
+
 #include <inttypes.h>
 #include "mcu.h"
 #include "mcu_periph/sys_time.h"
@@ -50,8 +52,11 @@
 
 #include "subsystems/imu.h"
 #include "subsystems/gps.h"
+#include "subsystems/air_data.h"
 
+#if USE_BARO_BOARD
 #include "subsystems/sensors/baro.h"
+#endif
 
 #include "subsystems/electrical.h"
 
@@ -68,23 +73,24 @@
 #include "firmwares/rotorcraft/main.h"
 
 #ifdef SITL
-#include "nps_autopilot_rotorcraft.h"
+#include "nps_autopilot.h"
 #endif
 
 #include "generated/modules.h"
+#include "subsystems/abi.h"
 
 
 /* if PRINT_CONFIG is defined, print some config options */
 PRINT_CONFIG_VAR(PERIODIC_FREQUENCY)
 
-#ifndef TELEMETRY_FREQUENCY
-#define TELEMETRY_FREQUENCY 60
-#endif
+/* TELEMETRY_FREQUENCY is defined in generated/periodic_telemetry.h
+ * defaults to 60Hz or set by TELEMETRY_FREQUENCY configure option in airframe file
+ */
 PRINT_CONFIG_VAR(TELEMETRY_FREQUENCY)
 
-#ifndef MODULES_FREQUENCY
-#define MODULES_FREQUENCY 512
-#endif
+/* MODULES_FREQUENCY is defined in generated/modules.h
+ * according to main_freq parameter set for modules in airframe file
+ */
 PRINT_CONFIG_VAR(MODULES_FREQUENCY)
 
 #ifndef BARO_PERIODIC_FREQUENCY
@@ -95,8 +101,6 @@ PRINT_CONFIG_VAR(BARO_PERIODIC_FREQUENCY)
 
 static inline void on_gyro_event( void );
 static inline void on_accel_event( void );
-static inline void on_baro_abs_event( void );
-static inline void on_baro_dif_event( void );
 static inline void on_gps_event( void );
 static inline void on_mag_event( void );
 
@@ -106,8 +110,10 @@ tid_t modules_tid;       ///< id for modules_periodic_task() timer
 tid_t failsafe_tid;      ///< id for failsafe_check() timer
 tid_t radio_control_tid; ///< id for radio_control_periodic_task() timer
 tid_t electrical_tid;    ///< id for electrical_periodic() timer
-tid_t baro_tid;          ///< id for baro_periodic() timer
 tid_t telemetry_tid;     ///< id for telemetry_periodic() timer
+#if USE_BARO_BOARD
+tid_t baro_tid;          ///< id for baro_periodic() timer
+#endif
 
 #ifndef SITL
 int main( void ) {
@@ -136,9 +142,14 @@ STATIC_INLINE void main_init( void ) {
 
   radio_control_init();
 
+  air_data_init();
+#if USE_BARO_BOARD
   baro_init();
+#endif
   imu_init();
-
+#if USE_IMU_FLOAT
+  imu_float_init();
+#endif
   ahrs_aligner_init();
   ahrs_init();
 
@@ -170,8 +181,10 @@ STATIC_INLINE void main_init( void ) {
   radio_control_tid = sys_time_register_timer((1./60.), NULL);
   failsafe_tid = sys_time_register_timer(0.05, NULL);
   electrical_tid = sys_time_register_timer(0.1, NULL);
-  baro_tid = sys_time_register_timer(1./BARO_PERIODIC_FREQUENCY, NULL);
   telemetry_tid = sys_time_register_timer((1./TELEMETRY_FREQUENCY), NULL);
+#if USE_BARO_BOARD
+  baro_tid = sys_time_register_timer(1./BARO_PERIODIC_FREQUENCY, NULL);
+#endif
 }
 
 STATIC_INLINE void handle_periodic_tasks( void ) {
@@ -185,10 +198,12 @@ STATIC_INLINE void handle_periodic_tasks( void ) {
     failsafe_check();
   if (sys_time_check_and_ack_timer(electrical_tid))
     electrical_periodic();
-  if (sys_time_check_and_ack_timer(baro_tid))
-    baro_periodic();
   if (sys_time_check_and_ack_timer(telemetry_tid))
     telemetry_periodic();
+#if USE_BARO_BOARD
+  if (sys_time_check_and_ack_timer(baro_tid))
+    baro_periodic();
+#endif
 }
 
 STATIC_INLINE void main_periodic( void ) {
@@ -220,6 +235,14 @@ STATIC_INLINE void failsafe_check( void ) {
     autopilot_set_mode(AP_MODE_FAILSAFE);
   }
 
+#if FAILSAFE_ON_BAT_CRITICAL
+  if (autopilot_mode != AP_MODE_KILL &&
+      electrical.bat_critical)
+  {
+    autopilot_set_mode(AP_MODE_FAILSAFE);
+  }
+#endif
+
 #if USE_GPS
   if (autopilot_mode == AP_MODE_NAV &&
       autopilot_motors_on &&
@@ -231,6 +254,8 @@ STATIC_INLINE void failsafe_check( void ) {
     autopilot_set_mode(AP_MODE_FAILSAFE);
   }
 #endif
+
+  autopilot_check_in_flight(autopilot_motors_on);
 }
 
 STATIC_INLINE void main_event( void ) {
@@ -245,7 +270,9 @@ STATIC_INLINE void main_event( void ) {
 
   ImuEvent(on_gyro_event, on_accel_event, on_mag_event);
 
-  BaroEvent(on_baro_abs_event, on_baro_dif_event);
+#if USE_BARO_BOARD
+  BaroEvent();
+#endif
 
 #if USE_GPS
   GpsEvent(on_gps_event);
@@ -286,17 +313,6 @@ static inline void on_gyro_event( void ) {
 #ifdef USE_VEHICLE_INTERFACE
   vi_notify_imu_available();
 #endif
-}
-
-static inline void on_baro_abs_event( void ) {
-  ins_update_baro();
-#ifdef USE_VEHICLE_INTERFACE
-  vi_notify_baro_abs_available();
-#endif
-}
-
-static inline void on_baro_dif_event( void ) {
-
 }
 
 static inline void on_gps_event(void) {

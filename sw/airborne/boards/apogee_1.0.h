@@ -253,8 +253,11 @@
 #define I2C2_GPIO_SDA GPIO11
 
 
-/* Activate onboard baro */
-#define BOARD_HAS_BARO 1
+/* by default activate onboard baro */
+#ifndef USE_BARO_BOARD
+#define USE_BARO_BOARD 1
+#endif
+
 
 /* PWM */
 #define PWM_USE_TIM2 1
@@ -308,7 +311,7 @@
 #endif
 
 #if USE_PWM3
-#define PWM_SERVO_3_IDX 3
+#define PWM_SERVO_3 3
 #define PWM_SERVO_3_TIMER TIM3
 #define PWM_SERVO_3_RCC_IOP RCC_AHB1ENR_IOPBEN
 #define PWM_SERVO_3_GPIO GPIOB
